@@ -448,7 +448,9 @@
       <a href="#repo">Repositorio</a>
       <a href="contribuir.html">Contribuir</a>
       <a href="admin.html">Admin</a>
-      <a href="registro.html" class="btn btn-primary" style="color:#ffffff !important;">Unirme</a>
+      <span id="nav-user-section">
+        <a href="registro.html" class="btn btn-primary" style="color:#ffffff !important;">Unirme</a>
+      </span>
     </div>
   </nav>
 
@@ -562,6 +564,58 @@
     </div>
   </section>
 
+  <!-- User Profile Modal -->
+  <div id="profile-modal" class="modal">
+    <div class="modal-content" style="max-width:550px;">
+      <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+      <h3 style="margin-bottom:1.5rem;">Mi Perfil</h3>
+      <div id="profile-content">
+        <div style="background:var(--bg-alt);padding:1.5rem;border-radius:12px;margin-bottom:1.5rem;">
+          <p style="margin:0;font-size:1.25rem;font-weight:600;color:var(--primary);" id="profile-nombre"></p>
+          <p style="margin:0.25rem 0 0;color:var(--text-light);" id="profile-email"></p>
+          <p style="margin:0.5rem 0 0;font-size:0.9rem;" id="profile-institucion"></p>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+          <div style="background:var(--white);border:1px solid var(--border);padding:1rem;border-radius:8px;text-align:center;">
+            <p style="font-size:2rem;font-weight:700;color:var(--primary);margin:0;" id="profile-descargas">0</p>
+            <p style="font-size:0.85rem;color:var(--text-light);margin:0;">Descargas</p>
+          </div>
+          <div style="background:var(--white);border:1px solid var(--border);padding:1rem;border-radius:8px;text-align:center;">
+            <p style="font-size:2rem;font-weight:700;color:var(--accent);margin:0;" id="profile-fecha"></p>
+            <p style="font-size:0.85rem;color:var(--text-light);margin:0;">Miembro desde</p>
+          </div>
+        </div>
+        <h4 style="margin-bottom:0.75rem;color:var(--primary);">Historial de descargas</h4>
+        <div id="profile-historial" style="max-height:200px;overflow-y:auto;"></div>
+        <button class="btn btn-outline" onclick="cerrarSesion()" style="width:100%;margin-top:1.5rem;">Cerrar sesión</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Modal -->
+  <div id="login-modal" class="modal">
+    <div class="modal-content" style="max-width:400px;">
+      <button class="modal-close" onclick="closeLoginModal()">&times;</button>
+      <h3 style="margin-bottom:0.5rem;">Iniciar sesión</h3>
+      <p style="color:var(--text-light);margin-bottom:1.5rem;">Accede a tu cuenta para ver el repositorio completo.</p>
+      <div id="login-error" class="error-msg"></div>
+      <form id="login-form-modal">
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label style="display:block;margin-bottom:0.3rem;font-size:0.85rem;">Email</label>
+          <input type="email" id="login-email" required style="width:100%;padding:0.75rem;border:1px solid var(--border);border-radius:6px;">
+        </div>
+        <div class="form-group" style="margin-bottom:1.5rem;">
+          <label style="display:block;margin-bottom:0.3rem;font-size:0.85rem;">Contraseña</label>
+          <input type="password" id="login-password" required style="width:100%;padding:0.75rem;border:1px solid var(--border);border-radius:6px;">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;" id="login-submit-btn">Entrar</button>
+      </form>
+      <p style="text-align:center;margin-top:1rem;font-size:0.9rem;color:var(--text-light);">
+        ¿No tienes cuenta? <a href="registro.html" style="color:var(--primary);">Regístrate gratis</a>
+      </p>
+    </div>
+  </div>
+
   <!-- Subscription Modal -->
   <div id="subscription-modal" class="modal">
     <div class="modal-content">
@@ -603,6 +657,8 @@
     document.addEventListener('DOMContentLoaded', async function() {
       // Check if user is logged in
       var user = Auth.getUser();
+      updateNavUser(user);
+      
       if (!user) {
         document.getElementById('guest-banner').style.display = 'flex';
       }
@@ -612,7 +668,117 @@
       
       // Setup PayPal button
       setupPayPal();
+      
+      // Setup login form
+      setupLoginForm();
     });
+
+    function updateNavUser(user) {
+      var navSection = document.getElementById('nav-user-section');
+      if (user && user.token) {
+        navSection.innerHTML = '<a href="#" onclick="openProfileModal();return false;" class="btn btn-primary" style="color:#ffffff !important;">' + (user.nombre || 'Mi cuenta') + '</a>';
+      } else {
+        navSection.innerHTML = '<a href="#" onclick="openLoginModal();return false;" style="margin-right:0.5rem;">Entrar</a><a href="registro.html" class="btn btn-primary" style="color:#ffffff !important;">Unirme</a>';
+      }
+    }
+
+    function openLoginModal() {
+      document.getElementById('login-modal').classList.add('active');
+    }
+
+    function closeLoginModal() {
+      document.getElementById('login-modal').classList.remove('active');
+      document.getElementById('login-error').classList.remove('show');
+    }
+
+    function openProfileModal() {
+      document.getElementById('profile-modal').classList.add('active');
+      loadUserProfile();
+    }
+
+    function closeProfileModal() {
+      document.getElementById('profile-modal').classList.remove('active');
+    }
+
+    async function loadUserProfile() {
+      var user = Auth.getUser();
+      if (!user || !user.token) return;
+
+      document.getElementById('profile-nombre').textContent = (user.nombre || '') + ' ' + (user.apellido || '');
+      document.getElementById('profile-email').textContent = user.email || '';
+      document.getElementById('profile-institucion').textContent = user.institucion || '';
+
+      var result = await api('getPerfilUsuario', { userToken: user.token });
+      if (result.ok) {
+        document.getElementById('profile-descargas').textContent = result.usuario.totalDescargas || 0;
+        var fecha = new Date(result.usuario.fechaRegistro);
+        document.getElementById('profile-fecha').textContent = fecha.toLocaleDateString('es-MX', { month: 'short', year: 'numeric' });
+
+        var historial = document.getElementById('profile-historial');
+        if (result.descargas && result.descargas.length > 0) {
+          historial.innerHTML = result.descargas.map(function(d) {
+            var f = new Date(d.fecha);
+            return '<div style="padding:0.75rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+              '<span>' + f.toLocaleDateString('es-MX') + '</span>' +
+              '<span style="color:var(--text-light);">' + d.cantidadCitas + ' citas</span>' +
+              '<span style="font-weight:600;color:var(--primary);">$' + d.monto + '</span>' +
+            '</div>';
+          }).join('');
+        } else {
+          historial.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:1rem;">No tienes descargas aún.</p>';
+        }
+      }
+    }
+
+    function setupLoginForm() {
+      document.getElementById('login-form-modal').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var email = document.getElementById('login-email').value.trim().toLowerCase();
+        var password = document.getElementById('login-password').value;
+        var btn = document.getElementById('login-submit-btn');
+        var errorEl = document.getElementById('login-error');
+
+        errorEl.classList.remove('show');
+        btn.disabled = true;
+        btn.textContent = 'Entrando...';
+
+        try {
+          var passHash = await sha256(password);
+          var result = await api('loginUsuario', { email: email, passHash: passHash });
+
+          if (result.ok) {
+            Auth.setUser({
+              token: result.token,
+              nombre: result.user.nombre,
+              apellido: result.user.apellido,
+              email: result.user.email,
+              institucion: result.user.institucion
+            });
+            closeLoginModal();
+            updateNavUser(Auth.getUser());
+            document.getElementById('guest-banner').style.display = 'none';
+            filterCitas();
+          } else {
+            errorEl.textContent = result.error || 'Credenciales incorrectas';
+            errorEl.classList.add('show');
+          }
+        } catch(err) {
+          errorEl.textContent = 'Error de conexión';
+          errorEl.classList.add('show');
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+      });
+    }
+
+    function cerrarSesion() {
+      Auth.logout();
+      closeProfileModal();
+      updateNavUser(null);
+      document.getElementById('guest-banner').style.display = 'flex';
+      filterCitas();
+    }
 
     async function loadCitas() {
       var loading = document.getElementById('loading');
