@@ -6,6 +6,7 @@
   <title>Sintropía Social — Repositorio Bibliográfico</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script src="https://www.paypal.com/sdk/js?client-id=BAADNWafE2xUH09mKvDiejlkmXxK9XQx1oa-ujzF7TF-pQNLf1a58OhHRUMUNoDx9dgXzhDclHdQhukdW0&components=hosted-buttons&disable-funding=venmo&currency=MXN"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     :root {
       --primary: #1a3a2f;
@@ -632,12 +633,24 @@
     <div class="modal-content">
       <button class="modal-close" onclick="closeDownloadModal()" data-testid="close-modal-btn">×</button>
       <h3>Descargar citas filtradas</h3>
-      <p>Pago único de <strong>$18 MXN</strong> por las citas seleccionadas.</p>
-      <div id="paypal-button-container"></div>
-      <div id="paypal-container-RY5K7VHYRPJLY"></div>
+      <div id="download-info" style="background:var(--bg-alt);padding:1rem;border-radius:8px;margin:1rem 0;">
+        <p style="margin:0;"><strong id="download-count">0</strong> citas seleccionadas</p>
+        <p style="margin:0.5rem 0 0;font-size:0.85rem;color:var(--text-light);" id="download-filters"></p>
+      </div>
+      
+      <div id="subscriber-download" style="display:none;">
+        <p style="color:var(--success);font-weight:500;">✓ Tienes suscripción activa</p>
+        <button class="btn btn-primary" onclick="descargarPDF()" style="width:100%;margin-top:1rem;">Descargar PDF gratis</button>
+      </div>
+      
+      <div id="payment-section">
+        <p>Pago único de <strong>$18 MXN</strong></p>
+        <button class="btn btn-accent" onclick="abrirVentanaPago()" style="width:100%;margin-top:1rem;">Pagar con PayPal</button>
+      </div>
+      
       <div id="download-ready" class="download-section" style="display:none;">
-        <p>✓ ¡Pago completado!</p>
-        <button class="btn btn-primary" onclick="downloadCSV()" data-testid="download-csv-btn">Descargar CSV ahora</button>
+        <p style="color:var(--success);font-weight:500;">✓ ¡Pago completado!</p>
+        <p style="font-size:0.9rem;color:var(--text-light);">Tu PDF se está descargando...</p>
       </div>
     </div>
   </div>
@@ -958,9 +971,20 @@
     function openSubscriptionModal() {
       document.getElementById('subscription-modal').classList.add('active');
       // Render PayPal subscription button
-      if (!document.querySelector('#paypal-container-DEV3WDLVZ35HJ button')) {
+      if (!document.querySelector('#paypal-container-DEV3WDLVZ35HJ iframe')) {
         paypal.HostedButtons({
           hostedButtonId: "DEV3WDLVZ35HJ",
+          onApprove: function(data) {
+            // Mark user as subscriber
+            var user = Auth.getUser();
+            if (user) {
+              user.suscripcionActiva = true;
+              user.suscripcionId = data.subscriptionID || data.orderID;
+              Auth.setUser(user);
+            }
+            alert('¡Suscripción activada! Ahora puedes descargar citas ilimitadas.');
+            closeSubscriptionModal();
+          }
         }).render("#paypal-container-DEV3WDLVZ35HJ");
       }
     }
@@ -971,6 +995,33 @@
 
     // Download Modal
     function openDownloadModal() {
+      var user = Auth.getUser();
+      var count = filteredCitas.length > 0 ? filteredCitas.length : allCitas.length;
+      
+      document.getElementById('download-count').textContent = count;
+      
+      // Show active filters
+      var filtersText = [];
+      var cat = document.getElementById('filter-categoria').value;
+      var ind = document.getElementById('filter-indicador').value;
+      var aut = document.getElementById('filter-autor').value;
+      var yr = document.getElementById('filter-year').value;
+      if (cat) filtersText.push('Categoría: ' + cat);
+      if (ind) filtersText.push('Indicador: ' + ind);
+      if (aut) filtersText.push('Autor: ' + aut);
+      if (yr) filtersText.push('Año: ' + yr);
+      document.getElementById('download-filters').textContent = filtersText.length > 0 ? filtersText.join(' • ') : 'Sin filtros (todas las citas)';
+      
+      // Check if user has subscription
+      if (user && user.suscripcionActiva) {
+        document.getElementById('subscriber-download').style.display = 'block';
+        document.getElementById('payment-section').style.display = 'none';
+      } else {
+        document.getElementById('subscriber-download').style.display = 'none';
+        document.getElementById('payment-section').style.display = 'block';
+      }
+      
+      document.getElementById('download-ready').style.display = 'none';
       document.getElementById('download-modal').classList.add('active');
     }
 
@@ -978,16 +1029,179 @@
       document.getElementById('download-modal').classList.remove('active');
     }
 
-    function setupPayPal() {
-      if (typeof paypal === 'undefined') {
-        console.error('PayPal SDK not loaded');
-        return;
+    var paypalWindow = null;
+    
+    function abrirVentanaPago() {
+      // Store current filter state
+      localStorage.setItem('ss_pending_download', JSON.stringify({
+        filtros: {
+          categoria: document.getElementById('filter-categoria').value,
+          indicador: document.getElementById('filter-indicador').value,
+          autor: document.getElementById('filter-autor').value,
+          year: document.getElementById('filter-year').value
+        },
+        timestamp: Date.now()
+      }));
+      
+      // Open PayPal in new window
+      var width = 450;
+      var height = 600;
+      var left = (screen.width - width) / 2;
+      var top = (screen.height - height) / 2;
+      
+      paypalWindow = window.open(
+        'pago.html',
+        'PayPalPago',
+        'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',scrollbars=yes'
+      );
+      
+      // Listen for payment completion
+      window.addEventListener('message', handlePaymentMessage);
+    }
+    
+    function handlePaymentMessage(event) {
+      if (event.data && event.data.type === 'PAYMENT_SUCCESS') {
+        window.removeEventListener('message', handlePaymentMessage);
+        if (paypalWindow) paypalWindow.close();
+        
+        // Show success and download
+        document.getElementById('payment-section').style.display = 'none';
+        document.getElementById('download-ready').style.display = 'block';
+        
+        // Auto download PDF
+        setTimeout(function() {
+          descargarPDF();
+          registrarDescargaEnServidor();
+        }, 500);
+      }
+    }
+    
+    function registrarDescargaEnServidor() {
+      var user = Auth.getUser();
+      if (user && user.token) {
+        var count = filteredCitas.length > 0 ? filteredCitas.length : allCitas.length;
+        api('registrarDescarga', {
+          userToken: user.token,
+          tipoPago: 'unico',
+          monto: '18',
+          filtros: document.getElementById('download-filters').textContent,
+          cantidadCitas: count
+        });
+      }
+    }
+
+    function descargarPDF() {
+      var { jsPDF } = window.jspdf;
+      var doc = new jsPDF();
+      
+      var dataToExport = filteredCitas.length > 0 ? filteredCitas : allCitas;
+      var pageWidth = doc.internal.pageSize.getWidth();
+      var margin = 15;
+      var yPos = 20;
+      var lineHeight = 6;
+      
+      // Title
+      doc.setFontSize(18);
+      doc.setTextColor(26, 58, 47);
+      doc.text('Sintropia Social', margin, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(12);
+      doc.setTextColor(100);
+      doc.text('Repositorio Bibliografico de Ciencias Sociales', margin, yPos);
+      yPos += 6;
+      
+      doc.setFontSize(10);
+      doc.text('Generado: ' + new Date().toLocaleDateString('es-MX'), margin, yPos);
+      yPos += 10;
+      
+      // Filters info
+      var filtersText = document.getElementById('download-filters').textContent;
+      if (filtersText) {
+        doc.setFontSize(9);
+        doc.setTextColor(120);
+        doc.text('Filtros: ' + filtersText, margin, yPos);
+        yPos += 8;
       }
       
-      // Render hosted button for $18 download
-      paypal.HostedButtons({
-        hostedButtonId: "RY5K7VHYRPJLY",
-      }).render("#paypal-container-RY5K7VHYRPJLY");
+      doc.setDrawColor(200);
+      doc.line(margin, yPos, pageWidth - margin, yPos);
+      yPos += 10;
+      
+      // Citations
+      doc.setFontSize(10);
+      dataToExport.forEach(function(c, index) {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        var categoria = c['Categoria'] || c['Categoría'] || '';
+        var year = c['Anio'] || c['Año'] || '';
+        var autor = c['Autor'] || '';
+        var cita = c['Cita'] || '';
+        var citaApa = c['Cita Apa'] || c['Cita APA'] || '';
+        
+        // Category and year badge
+        doc.setFontSize(8);
+        doc.setTextColor(124, 58, 237);
+        doc.text((categoria + ' | ' + year).toUpperCase(), margin, yPos);
+        yPos += 5;
+        
+        // Quote
+        doc.setFontSize(10);
+        doc.setTextColor(40);
+        var citaLines = doc.splitTextToSize('"' + cita + '"', pageWidth - margin * 2 - 5);
+        citaLines.forEach(function(line) {
+          if (yPos > 275) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(line, margin + 5, yPos);
+          yPos += lineHeight;
+        });
+        
+        // Author
+        doc.setFontSize(9);
+        doc.setTextColor(80);
+        doc.text('— ' + autor, margin + 5, yPos);
+        yPos += 6;
+        
+        // APA
+        if (citaApa) {
+          doc.setFontSize(8);
+          doc.setTextColor(120);
+          var apaLines = doc.splitTextToSize('APA: ' + citaApa, pageWidth - margin * 2 - 10);
+          apaLines.forEach(function(line) {
+            if (yPos > 275) {
+              doc.addPage();
+              yPos = 20;
+            }
+            doc.text(line, margin + 5, yPos);
+            yPos += 5;
+          });
+        }
+        
+        yPos += 8;
+        
+        // Separator
+        if (index < dataToExport.length - 1) {
+          doc.setDrawColor(220);
+          doc.line(margin, yPos - 3, pageWidth - margin, yPos - 3);
+        }
+      });
+      
+      // Footer on last page
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text('www.sintropiasocial.com | contacto@sintropiasocial.com', pageWidth / 2, 290, { align: 'center' });
+      
+      // Download
+      doc.save('sintropia_social_citas_' + new Date().toISOString().slice(0, 10) + '.pdf');
+    }
+
+    function setupPayPal() {
+      // PayPal setup moved to popup window
     }
 
     function downloadCSV() {

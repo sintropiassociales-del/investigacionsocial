@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pago — Sintropía Social</title>
+  <script src="https://www.paypal.com/sdk/js?client-id=BAADNWafE2xUH09mKvDiejlkmXxK9XQx1oa-ujzF7TF-pQNLf1a58OhHRUMUNoDx9dgXzhDclHdQhukdW0&components=hosted-buttons&disable-funding=venmo&currency=MXN"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #faf9f7;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .container {
+      background: white;
+      padding: 2rem;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+    .logo {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #1a3a2f;
+      margin-bottom: 0.5rem;
+    }
+    h2 {
+      color: #1a3a2f;
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    p {
+      color: #666;
+      margin-bottom: 1.5rem;
+    }
+    .price {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #c9a227;
+      margin-bottom: 1.5rem;
+    }
+    .price span {
+      font-size: 1rem;
+      color: #666;
+    }
+    #paypal-container {
+      margin: 1.5rem 0;
+    }
+    .success {
+      display: none;
+      text-align: center;
+    }
+    .success.show {
+      display: block;
+    }
+    .success-icon {
+      font-size: 4rem;
+      color: #28a745;
+      margin-bottom: 1rem;
+    }
+    .success h3 {
+      color: #1a3a2f;
+      margin-bottom: 0.5rem;
+    }
+    .success p {
+      color: #666;
+    }
+    .secure-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: #666;
+      font-size: 0.8rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="payment-form">
+      <p class="logo">Sintropía Social</p>
+      <h2>Descarga de citas</h2>
+      <p>Pago único por tu selección filtrada</p>
+      <div class="price">$18 <span>MXN</span></div>
+      
+      <div id="paypal-container"></div>
+      
+      <div class="secure-badge">
+        🔒 Pago seguro con PayPal
+      </div>
+    </div>
+    
+    <div id="success-message" class="success">
+      <div class="success-icon">✓</div>
+      <h3>¡Pago completado!</h3>
+      <p>Tu descarga comenzará automáticamente.<br>Puedes cerrar esta ventana.</p>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      if (typeof paypal !== 'undefined' && paypal.HostedButtons) {
+        paypal.HostedButtons({
+          hostedButtonId: "RY5K7VHYRPJLY",
+          onApprove: function(data) {
+            // Show success
+            document.getElementById('payment-form').style.display = 'none';
+            document.getElementById('success-message').classList.add('show');
+            
+            // Notify parent window
+            if (window.opener) {
+              window.opener.postMessage({ type: 'PAYMENT_SUCCESS', data: data }, '*');
+            }
+            
+            // Auto close after 3 seconds
+            setTimeout(function() {
+              window.close();
+            }, 3000);
+          }
+        }).render("#paypal-container");
+      }
+    });
+  </script>
+</body>
+</html>
